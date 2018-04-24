@@ -8,6 +8,7 @@ import android.support.annotation.NonNull;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.widget.TextView;
 import android.widget.Toast;
 import java.util.Random;
 import be.tarsos.dsp.AudioDispatcher;
@@ -19,20 +20,21 @@ import be.tarsos.dsp.onsets.PercussionOnsetDetector;
 public class MainActivity extends AppCompatActivity {
 
     int[] files = {R.raw.meme1, R.raw.meme2,R.raw.meme3,R.raw.meme4,R.raw.meme5};
-    MediaPlayer mp = null;
+    MediaPlayer mp;
     int claps = 0;
 
-    private static final int REQUEST_AUDIO_PERMISSION_RESULT = 0;
+    private static final int REQUEST_AUDIO_PERMISSION_RESULT = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        mp = MediaPlayer.create(this.getBaseContext(), files[0]);
         startRecording();
+        modifyText();
     }
 
     public void startRecording(){
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
                     PackageManager.PERMISSION_GRANTED) {
@@ -61,29 +63,22 @@ public class MainActivity extends AppCompatActivity {
             if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(getApplicationContext(),
                         "Application will not have audio on record", Toast.LENGTH_SHORT).show();
+            }else{
+                startAudioDispatcher();
             }
         }
     }
 
     public void startAudioDispatcher(){
         AudioDispatcher dispatcher = AudioDispatcherFactory.fromDefaultMicrophone(22050,1024,0);
-        double threshold = 20;
-        double sensitivity = 80;
+        double threshold = 12;
+        double sensitivity = 50;
         PercussionOnsetDetector mPercussionDetector = new PercussionOnsetDetector(22050, 1024,
                 new OnsetHandler() {
                     @Override
                     public void handleOnset(double time, double salience) {
-                        System.out.println("Time: "+ time + " Salience:" + salience);
-
-                        if(claps == 0){
-                            claps++;
-                            return;
-                        }else if(claps == 1){
-                            playAudio();
-                            claps++;
-                        }else{
-                            claps = 0;
-                        }
+                        System.out.println("Time: "+ time + " Claps:" + claps);
+                        playAudio();
                     }
                 }, sensitivity, threshold);
         dispatcher.addAudioProcessor(mPercussionDetector);
@@ -93,12 +88,44 @@ public class MainActivity extends AppCompatActivity {
     public void playAudio(){
         int rnd = new Random().nextInt(files.length);
 
-        if(mp == null){
-            mp = MediaPlayer.create(this, files[0]);
+        if(mp != null && !mp.isPlaying()){
+            //dont want to pick up phone audio
+            claps++;
         }
-        if(!mp.isPlaying()){
+
+        if(mp != null && !mp.isPlaying() && claps >= 2){
+            mp.release();
             mp = MediaPlayer.create(this, files[rnd]);
+            mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener()
+            {
+                public void onCompletion(MediaPlayer mp)
+                {
+                    modifyText();
+                }
+            });
             mp.start();
+            claps = 0;
         }
+        modifyText();
+
+    }
+
+
+    public void modifyText(){
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                // updates the UI
+                TextView text = findViewById(R.id.centerText);
+                if(claps == 0 && mp != null && !mp.isPlaying()){
+                    text.setText("\uD83D\uDC4F Meme Review \uD83D\uDC4F");
+                }else if(claps == 1){
+                    text.setText("\uD83D\uDC4F");
+                }else{
+                    text.setText("\uD83D\uDC4F\uD83D\uDC4F");
+                }
+            }
+        });
     }
 }
